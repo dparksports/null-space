@@ -3,9 +3,14 @@
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
+// cv::line?
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
 
+//#include <opencv2/core/mat.hpp>
+// cv:imread
+#include <opencv2/highgui/highgui.hpp>
 
 // setprecision
 #include <iomanip>
@@ -52,6 +57,50 @@ void print(const string name, const cv::Mat m) {
 void print(const string name, const Eigen::MatrixXf m) {
     std::cout << name << ": ( " << m.rows()  << ", " << m.cols() << " ) = " << std::endl << m << std::endl << std::endl;
 }
+
+/**
+ * \brief Draw epipolar lines on a given image
+ *
+ * \param img Input/output image on which the lines will be drawn
+ * \param epiLines Set of epipolar lines to draw.
+ * \param color Color in which the lines should be drawn.
+ */
+void drawEpipolarLines(cv::Mat& img, const cv::Mat& epiLines, const cv::Scalar color) {
+    size_t rows = img.rows;
+    size_t cols = img.cols;
+
+    // Compute left and right edge intersections for the image
+    cv::Mat P_UL = (cv::Mat_<float>(3, 1) << 0, 0, 1);               // Upper left
+    cv::Mat P_BL = (cv::Mat_<float>(3, 1) << 0, rows - 1, 1);        // Bottom left
+    cv::Mat P_UR = (cv::Mat_<float>(3, 1) << cols - 1, 0, 1);        // Upper right
+    cv::Mat P_BR = (cv::Mat_<float>(3, 1) << cols - 1, rows - 1, 1); // Bottom right
+
+    // Compute the lines corresponding to the left and right edges of the image
+    cv::Mat I_L = P_UL.cross(P_BL);
+    cv::Mat I_R = P_UR.cross(P_BR);
+
+    // Iterate over columns of lines and compute the endpoints, and then draw them
+    for (int col = 0; col < epiLines.cols; col++) {
+        cv::Mat curLine = epiLines.col(col);
+        cv::Mat P_iL = curLine.cross(I_L);
+        cv::Mat P_iR = curLine.cross(I_R);
+
+        // Scale correctly
+        P_iL /= P_iL.at<float>(2, 0);
+        P_iR /= P_iR.at<float>(2, 0);
+
+        // Transpose just for logging (not actually used in calculation)
+        cv::Mat P_iL_T, P_iR_T;
+        cv::transpose(P_iL, P_iL_T);
+        cv::transpose(P_iR, P_iR_T);
+
+        cv::line(img,
+                 cv::Point2f(P_iL.at<float>(0, 0), P_iL.at<float>(1, 0)),
+                 cv::Point2f(P_iR.at<float>(0, 0), P_iR.at<float>(1, 0)),
+                 color);
+    }
+}
+
 
 int main() {
     Eigen::MatrixXf pts2d(6,2), pts3d(6,3);
@@ -183,11 +232,23 @@ int main() {
     cv::Mat linesA = pointsBcv * estimatedF;
     print("linesA", linesA);
 
-    cv::Mat linesA_T;
+    cv::Mat linesA_T, linesB_T;
     cv::transpose(linesA, linesA_T);
     print("linesA_T", linesA_T);
     cv::Mat linesB = estimatedF * pointsA_T;
-    print("linesB", linesB);
+    cv::transpose(linesB, linesB_T);
+    print("linesB_T", linesB_T);
+
+    std::string _outputPathPrefix = "../";
+    cv::Mat picA = cv::imread(_outputPathPrefix + "pic_a.jpg", cv::IMREAD_UNCHANGED);
+    cv::Mat picB = cv::imread(_outputPathPrefix + "pic_b.jpg", cv::IMREAD_UNCHANGED);
+
+    // Draw epipolar lines on A and B images
+    drawEpipolarLines(picA, linesA_T, CV_RGB(0, 0xFF, 0));
+    drawEpipolarLines(picB, linesB_T, CV_RGB(0, 0xFF, 0));
+
+    cv::imwrite(_outputPathPrefix + "ps3-2-c-1.png", picA);
+    cv::imwrite(_outputPathPrefix + "ps3-2-c-2.png", picB);
 
 
     return 0;
