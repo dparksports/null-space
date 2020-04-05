@@ -229,15 +229,14 @@ int main() {
     print("pointsAcv", pointsAcv);
     print("pointsBcv", pointsBcv);
 
-    cv::Mat linesA = pointsBcv * estimatedF;
+    cv::Mat linesA = pointsBcv * fHatcv;
     print("linesA", linesA);
 
     cv::Mat linesA_T, linesB_T;
     cv::transpose(linesA, linesA_T);
     print("linesA_T", linesA_T);
-    cv::Mat linesB = estimatedF * pointsA_T;
-    cv::transpose(linesB, linesB_T);
-    print("linesB_T", linesB_T);
+    cv::Mat linesB = fHatcv * pointsA_T;
+    print("linesB", linesB);
 
     std::string _outputPathPrefix = "../";
     cv::Mat picA = cv::imread(_outputPathPrefix + "pic_a.jpg", cv::IMREAD_UNCHANGED);
@@ -245,10 +244,10 @@ int main() {
 
     // Draw epipolar lines on A and B images
     drawEpipolarLines(picA, linesA_T, CV_RGB(0, 0xFF, 0));
-    drawEpipolarLines(picB, linesB_T, CV_RGB(0, 0xFF, 0));
+    drawEpipolarLines(picB, linesB, CV_RGB(0, 0xFF, 0));
 
-    cv::imwrite(_outputPathPrefix + "ps3-2-c-1.png", picA);
-    cv::imwrite(_outputPathPrefix + "ps3-2-c-2.png", picB);
+    cv::imwrite(_outputPathPrefix + "ps3-2-c-1-rank2.png", picA);
+    cv::imwrite(_outputPathPrefix + "ps3-2-c-2-rank2.png", picB);
 
 
     return 0;
