@@ -142,12 +142,12 @@ int main() {
     print("estimatedF", estimatedF);
 
     cv::cv2eigen(estimatedF, leastSquare);
-    // set smallest eigenvalue to zero, since rank 2
     assert(leastSquare.cols() == 3 && leastSquare.rows() == 3);
     auto svd = leastSquare.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
     auto singularValues = svd.singularValues();
     print("Diagonal", singularValues.asDiagonal());
 
+    // set smallest eigenvalue to zero, since rank 2
     singularValues(singularValues.rows() - 1, singularValues.cols() -1) = 0;
     Eigen::MatrixXf dHat = singularValues.asDiagonal();
     print("dHat", singularValues.asDiagonal());
@@ -158,6 +158,37 @@ int main() {
     cv::Mat fHatcv;
     cv::eigen2cv(fHat, fHatcv);
     print("fHatcv", fHatcv);
+
+    cv::Mat pointsAcv, pointsBcv;
+    cv::eigen2cv(eigenPts2dA, pointsAcv);
+    cv::eigen2cv(eigenPts2dB, pointsBcv);
+
+    cv::Mat pointsA_T, pointsB_T;
+    cv::transpose(pointsAcv, pointsA_T);
+    cv::transpose(pointsBcv, pointsB_T);
+    print("pointsA_T", pointsA_T);
+    print("pointsB_T", pointsB_T);
+
+    // Append a row of ones to the input points to make 3xn matrices
+    pointsA_T.push_back(cv::Mat::ones(1, pointsA_T.cols, pointsA_T.type()));
+    pointsB_T.push_back(cv::Mat::ones(1, pointsB_T.cols, pointsB_T.type()));
+    print("pointsA_T", pointsA_T);
+    print("pointsB_T", pointsB_T);
+
+    cv::transpose(pointsA_T, pointsAcv);
+    cv::transpose(pointsB_T, pointsBcv);
+    print("pointsAcv", pointsAcv);
+    print("pointsBcv", pointsBcv);
+
+    cv::Mat linesA = pointsBcv * estimatedF;
+    print("linesA", linesA);
+
+    cv::Mat linesA_T;
+    cv::transpose(linesA, linesA_T);
+    print("linesA_T", linesA_T);
+    cv::Mat linesB = estimatedF * pointsA_T;
+    print("linesB", linesB);
+
 
     return 0;
 }
