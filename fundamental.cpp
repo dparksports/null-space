@@ -1,13 +1,56 @@
+
+#include <Eigen/Core>
 #include <Eigen/Dense>
+#include <Eigen/SVD>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
+
+
+// setprecision
+#include <iomanip>
 #include <iostream>
+
+// logger
+//#include <spdlog/fmt/ostr.h>
+//#include <spdlog/spdlog.h>
 
 using namespace std;
 using namespace Eigen;
 
+// Struct to allow prettier printing of cv::Mats
+struct FormattedMat {
+    cv::Mat _mat;
+
+    FormattedMat(const cv::Mat& mat) : _mat(mat) {}
+
+    friend std::ostream& operator<<(std::ostream& stream, const FormattedMat& fm) {
+        std::ios init(NULL);
+        init.copyfmt(stream);
+        // Align right
+        stream << "[" << std::setprecision(5);
+        for (size_t y = 0; y < fm._mat.rows; y++) {
+            stream << (y == 0 ? " " : "  ");
+            for (size_t x = 0; x < fm._mat.cols; x++) {
+                stream << std::left << std::setw(13) << fm._mat.at<float>(y, x);
+            }
+            stream << (y < fm._mat.rows - 1 ? "\n" : " ");
+        }
+        stream << "]";
+        // Restore original formatting
+        stream.copyfmt(init);
+        return stream;
+    }
+};
+
+void print(const string name, const cv::Mat m) {
+    std::cout << name << ": ( " << m.size() << " ) = " << std::endl << FormattedMat(m) << std::endl << std::endl;
+//    auto logger = spdlog::get(config::STDOUT_LOGGER);
+//    logger->info(name, ":\n{}", FormattedMat(fMatEst));
+}
+
 void print(const string name, const Eigen::MatrixXf m) {
-    std::cout << name << ": ( " <<m.rows()  << ", " << m.cols() << " ) = " << std::endl << m << std::endl << std::endl;
+    std::cout << name << ": ( " << m.rows()  << ", " << m.cols() << " ) = " << std::endl << m << std::endl << std::endl;
 }
 
 int main() {
@@ -91,6 +134,30 @@ int main() {
     leastSquare.conservativeResize(leastSquare.rows() + 1, leastSquare.cols());
     leastSquare(leastSquare.rows() - 1, 0) = 1;
     print("leastSquare", leastSquare);
+
+    cv::Mat cvLeastSquare;
+    cv::eigen2cv(leastSquare, cvLeastSquare);
+    cv::Mat estimatedF = cvLeastSquare.reshape(0, 3);
+    print("cvLeastSquare", cvLeastSquare);
+    print("estimatedF", estimatedF);
+
+    cv::cv2eigen(estimatedF, leastSquare);
+    // set smallest eigenvalue to zero, since rank 2
+    assert(leastSquare.cols() == 3 && leastSquare.rows() == 3);
+    auto svd = leastSquare.jacobiSvd(Eigen::ComputeFullU | Eigen::ComputeFullV);
+    auto singularValues = svd.singularValues();
+    print("Diagonal", singularValues.asDiagonal());
+
+    singularValues(singularValues.rows() - 1, singularValues.cols() -1) = 0;
+    Eigen::MatrixXf dHat = singularValues.asDiagonal();
+    print("dHat", singularValues.asDiagonal());
+
+    Eigen::MatrixXf fHat = svd.matrixU() * dHat * svd.matrixV().transpose();
+    print("fHat", fHat);
+
+    cv::Mat fHatcv;
+    cv::eigen2cv(fHat, fHatcv);
+    print("fHatcv", fHatcv);
 
     return 0;
 }
