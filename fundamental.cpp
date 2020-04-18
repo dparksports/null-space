@@ -342,10 +342,9 @@ void drawDots(const cv::Mat& mask, const cv::Mat& img, cv::Mat& dottedImg) {
     dottedImg.setTo(cv::Scalar(0, 0, 255), maskNorm);
 }
 
-int main() {
-//    fundamental();
+void computeHarrisResponse(string current_path, string filename) {
+    string imgPath = current_path + filename + ".jpg";
 
-    string imgPath = "../simA.jpg";
     cv::Mat img = cv::imread(imgPath, cv::IMREAD_UNCHANGED);
     printRow("img", img);
 
@@ -374,7 +373,7 @@ int main() {
     printRow("gradXNorm", gradXNorm);
     printRow("gradYNorm", gradYNorm);
 
-    string outputPath = "../simA-sobel.jpg";
+    string outputPath = current_path + filename + "-sobel.jpg";
     cv::imwrite(outputPath, gradCombined);
 
     cv::Mat cornerResponse = cv::Mat::zeros(gradientX.rows, gradientX.cols, CV_32F);
@@ -433,7 +432,7 @@ int main() {
     cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
     printRow("normalizedHarrisResponse", normalizedHarrisResponse);
 
-    string responsePath = "../simA-harris-response.jpg";
+    string responsePath = current_path + filename + "-harris-response.jpg";
     cv::imwrite(responsePath, normalizedHarrisResponse);
 
 //    getCornerResponse( gradientX, gradientY, windowSize, sigmaGaussian, alpha, cornerResponse);
@@ -490,8 +489,18 @@ int main() {
 
     cv::Mat dottedImg;
     drawDots(localMaximaCorners, input, dottedImg);
-    string localMaximaPath = "../simA-harris-localmaxima.jpg";
+
+    string localMaximaPath = current_path + filename + "-harris-localmaxima.jpg";
     cv::imwrite(localMaximaPath, dottedImg);
     printRow("dottedImg", dottedImg);
 
+}
+
+int main() {
+//    fundamental();
+
+    computeHarrisResponse("../", "simA");
+    computeHarrisResponse("../", "simB");
+    computeHarrisResponse("../", "transA");
+    computeHarrisResponse("../", "transB");
 }
