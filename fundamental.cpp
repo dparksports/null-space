@@ -713,4 +713,5 @@ int main() {
 //    computeHarrisResponse("../", "transB");
 
     matchKNN("sim");
+    matchKNN("trans");
 }
