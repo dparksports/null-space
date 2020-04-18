@@ -330,6 +330,18 @@ void getCornerResponse(const cv::Mat& gradX,
     }
 }
 
+void drawDots(const cv::Mat& mask, const cv::Mat& img, cv::Mat& dottedImg) {
+    // Convert the image to rgb
+    cv::Mat img3Ch;
+    img.convertTo(img3Ch, CV_8UC3);
+    dottedImg.create(img3Ch.rows, img3Ch.cols, img3Ch.type());
+    cv::cvtColor(img, dottedImg, cv::COLOR_GRAY2RGB);
+
+    cv::Mat maskNorm(mask.rows, mask.cols, CV_8U);
+    cv::normalize(mask, maskNorm, 0, 255, cv::NORM_MINMAX, CV_8U);
+    dottedImg.setTo(cv::Scalar(0, 0, 255), maskNorm);
+}
+
 int main() {
 //    fundamental();
 
@@ -424,13 +436,62 @@ int main() {
     string responsePath = "../simA-harris-response.jpg";
     cv::imwrite(responsePath, normalizedHarrisResponse);
 
-    getCornerResponse( gradientX, gradientY, windowSize, sigmaGaussian, alpha, cornerResponse);
+//    getCornerResponse( gradientX, gradientY, windowSize, sigmaGaussian, alpha, cornerResponse);
+//
+//    cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+//    cv::imwrite(responsePath, normalizedHarrisResponse);
+//
+//    printRow("gradientX", gradientX);
+//    printRow("gradientY", gradientY);
+//    printRow("cornerResponse", cornerResponse);
+//    printRow("normalizedHarrisResponse", normalizedHarrisResponse);
 
-    cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-    cv::imwrite(responsePath, normalizedHarrisResponse);
 
-    printRow("gradientX", gradientX);
-    printRow("gradientY", gradientY);
-    printRow("cornerResponse", cornerResponse);
-    printRow("normalizedHarrisResponse", normalizedHarrisResponse);
+    const int minDistance = 5;
+    const double threshold = 500000000;
+
+    std::vector<std::pair<int, int>> cornerLocs;
+
+    assert(cornerResponse.type() == CV_32F);
+    cv::Mat localMaximaCorners = cv::Mat::zeros(cornerResponse.rows, cornerResponse.cols, cornerResponse.type());
+    printRow("localMaximaCorners", localMaximaCorners);
+
+    // non-maximum suppression?
+    for (int row = 0; row < cornerResponse.rows; row++) {
+        for (int col = 0; col < cornerResponse.cols; col++) {
+            float cornerValue = cornerResponse.at<float>(row, col);
+            if (cornerValue >= threshold) {
+                bool isLocalMaxima = true;
+
+                for (int rowWeight = -minDistance; rowWeight < minDistance; rowWeight++) {
+                    for (int colWeight = -minDistance; colWeight < minDistance; colWeight++) {
+                        int compareRow = std::min(std::max(0, row + rowWeight), cornerResponse.rows - 1);
+                        int compareCol = std::min(std::max(0, col + colWeight), cornerResponse.cols - 1);
+                        if (row == compareRow && col == compareCol) continue;
+
+                        if (cornerValue <= cornerResponse.at<float>(compareRow, compareCol)) {
+                            isLocalMaxima = false;
+                            break;
+                        }
+                    }
+                    if (!isLocalMaxima) break;
+                }
+
+                if (isLocalMaxima) {
+                    localMaximaCorners.at<float>(row, col) = cornerValue;
+                    cornerLocs.push_back(std::make_pair(row, col));
+
+                    // skip ahead in the row search
+                    col += minDistance - 1;
+                }
+            }
+        }
+    }
+
+    cv::Mat dottedImg;
+    drawDots(localMaximaCorners, input, dottedImg);
+    string localMaximaPath = "../simA-harris-localmaxima.jpg";
+    cv::imwrite(localMaximaPath, dottedImg);
+    printRow("dottedImg", dottedImg);
+
 }
