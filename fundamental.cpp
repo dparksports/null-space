@@ -387,7 +387,8 @@ void computeHarrisResponse(string current_path, string filename) {
     kernelGaussian2D = kernelGaussian2D * kernelGaussian2D.t(); // generate a 2d matrix with an outer product
     print("kernelGaussian1D", kernelGaussian2D);
 
-    // compute a second moment matrix for each pixel, where the weights are the Gaussian kernel
+    // compute a second moment matrix for each pixel, where t    static constexpr size_t SIFT_WINDOW_SIZE = 10;
+// he weights are the Gaussian kernel
     int windowHalf = windowSize / 2;
     for (int row = 0; row < gradientX.rows; row++) {
         for (int col = 0; col < gradientX.cols; col++) {
@@ -447,7 +448,8 @@ void computeHarrisResponse(string current_path, string filename) {
 
 
     const int minDistance = 5;
-    const double threshold = 500000000;
+    const double threshold = 500000000;    static constexpr size_t SIFT_WINDOW_SIZE = 10;
+
 
     std::vector<std::pair<int, int>> cornerLocs;
 
@@ -496,11 +498,211 @@ void computeHarrisResponse(string current_path, string filename) {
 
 }
 
+#include <vector>
+#include <cmath>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/xfeatures2d.hpp>
+
+struct FeaturesContainer {
+    cv::Mat gradientX, gradientY, cornerResponse, corners;
+    std::vector<std::pair<int, int>> cornerLocs;
+    std::vector<cv::KeyPoint> keypoints;
+    std::vector<cv::DMatch> goodMatches;
+    cv::Mat descriptors;
+    cv::Mat input, drawnKeypoints;
+
+    FeaturesContainer() {}
+};
+
+void computeScaleInvariant(FeaturesContainer& container, string current_path, string filename) {
+    string imgPath = current_path + filename + ".jpg";
+
+    cv::Mat img = cv::imread(imgPath, cv::IMREAD_UNCHANGED);
+    printRow("img", img);
+
+    img.convertTo(container.input, CV_32F);
+    printRow("input", container.input);
+
+    int sobel_kernel_size = 3;
+    int scale = 1;
+    int delta = 0;
+    int ddepth = CV_32F;
+
+    cv::Sobel(container.input, container.gradientX, ddepth, 1, 0, sobel_kernel_size, scale, delta, cv::BORDER_DEFAULT);
+    cv::Sobel(container.input, container.gradientY, ddepth, 0, 1, sobel_kernel_size, scale, delta, cv::BORDER_DEFAULT);
+    printRow("gradientX", container.gradientX);
+    printRow("gradientY", container.gradientY);
+
+
+    container.cornerResponse = cv::Mat::zeros(container.gradientX.rows, container.gradientX.cols, CV_32F);
+    printRow("cornerResponse", container.cornerResponse);
+
+    const size_t windowSize = 5;
+    const double sigmaGaussian = 1.5;
+    const float alpha = 0.04;
+    cv::Mat kernelGaussian2D = cv::getGaussianKernel(windowSize, sigmaGaussian, container.gradientX.type());
+    kernelGaussian2D = kernelGaussian2D * kernelGaussian2D.t(); // generate a 2d matrix with an outer product
+    print("kernelGaussian1D", kernelGaussian2D);
+
+    // compute a second moment matrix for each pixel, where t    static constexpr size_t SIFT_WINDOW_SIZE = 10;
+    //he weights are the Gaussian kernel
+    int windowHalf = windowSize / 2;
+    for (int row = 0; row < container.gradientX.rows; row++) {
+        for (int col = 0; col < container.gradientX.cols; col++) {
+            cv::Mat secondMomentMatrix = cv::Mat::zeros(2, 2, CV_32F);
+
+            for (int rowWeight = -windowHalf; rowWeight <= windowHalf; rowWeight++) {
+                for (int colWeight = -windowHalf; colWeight <= windowHalf; colWeight++) {
+
+                    float xGradientAt = container.gradientX.at<float>(std::min(std::max(0, row + rowWeight), container.gradientX.rows - 1),
+                                                            std::min(std::max(0, col + colWeight), container.gradientX.cols - 1));
+
+                    float yGradientAt = container.gradientY.at<float>(std::min(std::max(0, row + rowWeight), container.gradientY.rows - 1),
+                                                            std::min(std::max(0, col + colWeight), container.gradientY.cols - 1));
+
+                    // a gradient matrix
+                    cv::Mat gradientMatrix = (cv::Mat_<float>(2, 2)  <<
+                                                                     xGradientAt * xGradientAt,
+                            xGradientAt * yGradientAt,
+                            xGradientAt * yGradientAt,
+                            yGradientAt * yGradientAt);
+
+                    float weightXY = kernelGaussian2D.at<float>(rowWeight + windowHalf, colWeight + windowHalf);
+                    secondMomentMatrix = secondMomentMatrix + weightXY * gradientMatrix;
+                }
+            }
+
+            // compute Harris corner response
+            // R = det(M) - alpha * trace(M) ^ 2 = lambda1 * lambda2 - alpha (1ambda1 + lambda2) ^ 2
+            float trace = (cv::trace(secondMomentMatrix))[0];
+            float R = cv::determinant(secondMomentMatrix) - alpha * trace * trace;
+            container.cornerResponse.at<float>(row, col) = R;
+        }
+    }
+
+    printRow("cornerResponse", container.cornerResponse);
+
+    const int minDistance = 5;
+    const double threshold = 500000000;    static constexpr size_t SIFT_WINDOW_SIZE = 10;
+
+    assert(container.cornerResponse.type() == CV_32F);
+    container.corners = cv::Mat::zeros(container.cornerResponse.rows, container.cornerResponse.cols, container.cornerResponse.type());
+
+    // collect local maxima
+    for (int row = 0; row < container.cornerResponse.rows; row++) {
+        for (int col = 0; col < container.cornerResponse.cols; col++) {
+            float cornerValue = container.cornerResponse.at<float>(row, col);
+            if (cornerValue >= threshold) {
+                bool isLocalMaxima = true;
+
+                for (int rowWeight = -minDistance; rowWeight < minDistance; rowWeight++) {
+                    for (int colWeight = -minDistance; colWeight < minDistance; colWeight++) {
+                        int compareRow = std::min(std::max(0, row + rowWeight), container.cornerResponse.rows - 1);
+                        int compareCol = std::min(std::max(0, col + colWeight), container.cornerResponse.cols - 1);
+                        if (row == compareRow && col == compareCol) continue;
+
+                        if (cornerValue <= container.cornerResponse.at<float>(compareRow, compareCol)) {
+                            isLocalMaxima = false;
+                            break;
+                        }
+                    }
+                    if (!isLocalMaxima) break;
+                }
+
+                if (isLocalMaxima) {
+                    container.corners.at<float>(row, col) = cornerValue;
+                    container.cornerLocs.push_back(std::make_pair(row, col));
+
+                    // skip ahead in the row search
+                    col += minDistance - 1;
+                }
+            }
+        }
+    }
+
+    // Make sure our input images are the right size, then resize the output to the correct size
+    assert(container.gradientX.rows == container.gradientY.rows &&
+    container.gradientX.cols == container.gradientY.cols &&
+    container.gradientX.type() == container.gradientY.type() &&
+    container.gradientX.type() == CV_32F);
+
+    container.keypoints.clear();
+
+    for (const auto& corner : container.cornerLocs) {
+        float Ix = container.gradientX.at<float>(corner.first, corner.second);
+        float Iy = container.gradientY.at<float>(corner.first, corner.second);
+
+        static constexpr float PI = 3.1415921636;
+        float angle = std::atan2(Iy, Ix) * 100.f / PI;
+
+        static constexpr size_t SIFT_WINDOW_SIZE = 10;
+        container.keypoints.emplace_back(corner.second, corner.first, SIFT_WINDOW_SIZE, angle, 0);
+    }
+
+//    container.drawnKeypoints = cv::Mat::zeros( container.input.size(), CV_8UC3 );
+    container.input.convertTo(container.input, CV_8UC3);
+    cv::drawKeypoints(container.input, container.keypoints, container.drawnKeypoints,
+            cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+    string localMaximaPath = current_path + filename + "-drawnKeypoints.jpg";
+    cv::imwrite(localMaximaPath, container.drawnKeypoints);
+    printRow("drawnKeypoints", container.drawnKeypoints);
+
+
+    auto featuresSIFT = cv::xfeatures2d::SIFT::create();
+    featuresSIFT->compute(container.input, container.keypoints, container.descriptors);
+}
+
 int main() {
 //    fundamental();
 
-    computeHarrisResponse("../", "simA");
-    computeHarrisResponse("../", "simB");
-    computeHarrisResponse("../", "transA");
-    computeHarrisResponse("../", "transB");
+//    computeHarrisResponse("../", "simA");
+//    computeHarrisResponse("../", "simB");
+//    computeHarrisResponse("../", "transA");
+//    computeHarrisResponse("../", "transB");
+
+    std::vector<FeaturesContainer> containers;
+    containers.emplace_back();
+    containers.emplace_back();
+
+    computeScaleInvariant(containers[0], "../", "simA");
+    computeScaleInvariant(containers[1], "../", "simB");
+
+    auto matcher = cv::BFMatcher::create();
+    containers[0].goodMatches.clear();
+    containers[1].goodMatches.clear();
+
+    // Use KNN to find 2 matches for each point so we can apply the ratio test from the original
+    // SIFT paper (https://people.eecs.berkeley.edu/~malik/cs294/lowe-ijcv04.pdf)
+    std::vector<std::vector<cv::DMatch>> rawMatches;
+    matcher->knnMatch(containers[0].descriptors, containers[1].descriptors, rawMatches, 2);
+    for (const auto& matchPair : rawMatches) {
+        if (matchPair[0].distance < 0.75 * matchPair[1].distance) {
+            containers[0].goodMatches.push_back(matchPair[0]);
+        }
+    }
+    // Copy good matches from img1 to img2
+    containers[1].goodMatches = containers[0].goodMatches;
+
+    // Create image with lines drawn between matched points. As we iterate through each point, log
+    // its info
+    cv::Mat combinedSrc;
+    cv::hconcat(containers[0].input, containers[1].input, combinedSrc);
+
+    std::stringstream ss;
+    ss << "\nMatches:";
+    cv::RNG rng(12345);
+    for (const auto& match : containers[0].goodMatches) {
+        cv::KeyPoint k1 = containers[0].keypoints[match.queryIdx];
+        cv::KeyPoint k2 = containers[1].keypoints[match.trainIdx];
+        int xOffset = containers[0].input.cols;
+        cv::line(combinedSrc,
+                 k1.pt,
+                 cv::Point2f(k2.pt.x + xOffset, k2.pt.y),
+                 cv::Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255)));
+        ss << "\nqueryIdx=" << match.queryIdx << "; trainIdx=" << match.trainIdx
+           << "; distance=" << match.distance;
+    }
+
+    string combinedPath = "../sim-combined.jpg";
+    cv::imwrite(combinedPath, combinedSrc);
 }
