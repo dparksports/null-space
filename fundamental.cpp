@@ -650,28 +650,24 @@ void computeScaleInvariant(FeaturesContainer& container, string current_path, st
     featuresSIFT->compute(container.input, container.keypoints, container.descriptors);
 }
 
-int main() {
-//    fundamental();
+int matchKNN(string suffix) {
 
-//    computeHarrisResponse("../", "simA");
-//    computeHarrisResponse("../", "simB");
-//    computeHarrisResponse("../", "transA");
-//    computeHarrisResponse("../", "transB");
 
     std::vector<FeaturesContainer> containers;
     containers.emplace_back();
     containers.emplace_back();
 
-    computeScaleInvariant(containers[0], "../", "transA");
-    computeScaleInvariant(containers[1], "../", "transB");
+    computeScaleInvariant(containers[0], "../", suffix + "A");
+    computeScaleInvariant(containers[1], "../", suffix + "B");
 
-    auto matcher = cv::BFMatcher::create();
     containers[0].goodMatches.clear();
     containers[1].goodMatches.clear();
 
     // Use KNN to find 2 matches for each point so we can apply the ratio test from the original
     // SIFT paper (https://people.eecs.berkeley.edu/~malik/cs294/lowe-ijcv04.pdf)
     std::vector<std::vector<cv::DMatch>> rawMatches;
+
+    auto matcher = cv::BFMatcher::create();
     matcher->knnMatch(containers[0].descriptors, containers[1].descriptors, rawMatches, 2);
     for (const auto& matchPair : rawMatches) {
         if (matchPair[0].distance < 0.75 * matchPair[1].distance) {
@@ -685,6 +681,7 @@ int main() {
     // its info
     cv::Mat combinedSrc;
     cv::hconcat(containers[0].input, containers[1].input, combinedSrc);
+    cv::cvtColor(combinedSrc, combinedSrc, cv::COLOR_GRAY2RGB);
 
     std::stringstream ss;
     ss << "\nMatches:";
@@ -701,6 +698,19 @@ int main() {
            << "; distance=" << match.distance;
     }
 
-    string combinedPath = "../trans-combined.jpg";
+    std::cout << ss.str() << std::endl;
+    std::cout << "Found good matches:" << containers[0].goodMatches.size() << std::endl;
+    string combinedPath = "../" + suffix + "-combined.jpg";
     cv::imwrite(combinedPath, combinedSrc);
+}
+
+int main() {
+//    fundamental();
+
+//    computeHarrisResponse("../", "simA");
+//    computeHarrisResponse("../", "simB");
+//    computeHarrisResponse("../", "transA");
+//    computeHarrisResponse("../", "transB");
+
+    matchKNN("sim");
 }
