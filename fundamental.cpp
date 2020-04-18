@@ -281,4 +281,51 @@ int main() {
 
     string outputPath = "../simA-sobel.jpg";
     cv::imwrite(outputPath, gradCombined);
+
+    cv::Mat cornerResponse = cv::Mat::zeros(gradientX.rows, gradientX.cols, CV_32F);
+
+    const size_t windowSize = 5;
+    const double sigmaGaussian = 1.5;
+    cv::Mat kernelGaussian1D = cv::getGaussianKernel(windowSize, sigmaGaussian, CV_32F);
+    kernelGaussian1D = kernelGaussian1D * kernelGaussian1D.t(); // generate a 2d matrix with an outer product
+
+    // compute a second moment matrix for each pixel, where the weights are the Gaussian kernel
+    int windowHalf = windowSize / 2;
+    for (int row = 0; row < gradientX.rows; row++) {
+        for (int col = 0; col < gradientX.cols; col++) {
+            cv::Mat secondMomentMatrix = cv::Mat::zeros(2, 2, CV_32F);
+
+            for (int rowWeight = -windowHalf; rowWeight <= windowHalf; rowWeight++) {
+                for (int colWeight = -windowHalf; colWeight <= windowHalf; colWeight++) {
+
+                    float xGradientAt = gradientX.at<float>(std::min(std::max(0, row + rowWeight), gradientX.rows - 1),
+                                                            std::min(std::max(0, col + colWeight), gradientX.cols - 1));
+
+                    float yGradientAt = gradientY.at<float>(std::min(std::max(0, row + rowWeight), gradientY.rows - 1),
+                                                            std::min(std::max(0, col + colWeight), gradientY.cols - 1));
+
+                    // a gradient matrix
+                    cv::Mat gradientMatrix = (cv::Mat_<float>(2, 2)
+                            << xGradientAt * xGradientAt, xGradientAt * yGradientAt,
+                            xGradientAt, yGradientAt, yGradientAt * yGradientAt);
+
+                    float weightXY = kernelGaussian1D.at<float>(rowWeight + windowHalf, colWeight + windowHalf);
+                    secondMomentMatrix = secondMomentMatrix + (weightXY * gradientMatrix);
+                }
+            }
+
+            // compute Harris corner response
+            // R = det(M) - alpha * trace(M) ^ 2 = lambda1 * lambda2 - alpha (1ambda1 + lambda2) ^ 2
+            const float alpha = 0.04;
+            float trace = (cv::trace(secondMomentMatrix))[0];
+            float R = cv::determinant(secondMomentMatrix) - (alpha * trace * trace);
+            cornerResponse.at<float>(row, col) = R;
+        }
+    }
+
+    cv::Mat normalizedHarrisResponse;
+    cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    string responsePath = "../simA-harris-response.jpg";
+    cv::imwrite(responsePath, normalizedHarrisResponse);
+
 }
