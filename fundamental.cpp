@@ -8,7 +8,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
 
-//#include <opencv2/core/mat.hpp>
+#include <opencv2/core/mat.hpp>
 // cv:imread
 #include <opencv2/highgui/highgui.hpp>
 
@@ -102,7 +102,7 @@ void drawEpipolarLines(cv::Mat& img, const cv::Mat& epiLines, const cv::Scalar c
 }
 
 
-int main() {
+void fundamental() {
     Eigen::MatrixXf pts2d(6,2), pts3d(6,3);
     Eigen::MatrixXf eigenPts2dA(20,2), eigenPts2dB(20,2);
 
@@ -249,6 +249,36 @@ int main() {
     cv::imwrite(_outputPathPrefix + "ps3-2-c-1-rank2.png", picA);
     cv::imwrite(_outputPathPrefix + "ps3-2-c-2-rank2.png", picB);
 
+}
 
-    return 0;
+//using namespace cv;
+
+int main() {
+//    fundamental();
+
+    string filepath = "../simA.jpg";
+    cv::Mat  src = imread( filepath, cv::IMREAD_COLOR );
+
+    cv::Mat src_gray;
+    cvtColor(src, src_gray, cv::COLOR_BGR2GRAY);
+
+    int ksize = 1;
+    int scale = 1;
+    int delta = 0;
+    int ddepth = CV_16S;
+
+    cv::Mat  gradientX, gradientY;
+    cv::Sobel(src_gray, gradientX, ddepth, 1, 0, ksize, scale, delta, cv::BORDER_DEFAULT);
+    cv::Sobel(src_gray, gradientY, ddepth, 0, 1, ksize, scale, delta, cv::BORDER_DEFAULT);
+
+    cv::Mat gradCombined(gradientX.rows + gradientY.rows, gradientX.cols, CV_8UC1);
+    cv::Mat gradXNorm(gradientX.rows, gradientX.cols, CV_8UC1);
+    cv::Mat gradYNorm(gradientY.rows, gradientY.cols, CV_8UC1);
+
+    cv::normalize(gradientY, gradXNorm, 0, 255, cv::NORM_MINMAX);
+    cv::normalize(gradientY, gradYNorm, 0, 255, cv::NORM_MINMAX);
+    cv::hconcat(gradXNorm, gradYNorm, gradCombined);
+
+    string outputPath = "../simA-sobel.jpg";
+    cv::imwrite(outputPath, gradCombined);
 }
