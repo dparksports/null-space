@@ -371,11 +371,10 @@ int main() {
     const size_t windowSize = 5;
     const double sigmaGaussian = 1.5;
     const float alpha = 0.04;
-    cv::Mat kernelGaussian1D = cv::getGaussianKernel(windowSize, sigmaGaussian, gradientX.type());
-    print("kernelGaussian1D", kernelGaussian1D);
-
-    kernelGaussian1D = kernelGaussian1D * kernelGaussian1D.t(); // generate a 2d matrix with an outer product
-    print("kernelGaussian1D", kernelGaussian1D);
+    cv::Mat kernelGaussian2D = cv::getGaussianKernel(windowSize, sigmaGaussian, gradientX.type());
+    print("kernelGaussian2D", kernelGaussian2D);
+    kernelGaussian2D = kernelGaussian2D * kernelGaussian2D.t(); // generate a 2d matrix with an outer product
+    print("kernelGaussian1D", kernelGaussian2D);
 
     // compute a second moment matrix for each pixel, where the weights are the Gaussian kernel
     int windowHalf = windowSize / 2;
@@ -394,13 +393,15 @@ int main() {
                                                             std::min(std::max(0, col + colWeight), gradientY.cols - 1));
 
                     // a gradient matrix
-                    cv::Mat gradientMatrix = (cv::Mat_<float>(2, 2)
-                            << xGradientAt * xGradientAt, xGradientAt * yGradientAt,
-                            xGradientAt, yGradientAt, yGradientAt * yGradientAt);
+                    cv::Mat gradientMatrix = (cv::Mat_<float>(2, 2)  <<
+                            xGradientAt * xGradientAt,
+                            xGradientAt * yGradientAt,
+                            xGradientAt * yGradientAt,
+                            yGradientAt * yGradientAt);
 //                    print("gradientMatrix", gradientMatrix);
 
-                    float weightXY = kernelGaussian1D.at<float>(rowWeight + windowHalf, colWeight + windowHalf);
-                    secondMomentMatrix = secondMomentMatrix + (weightXY * gradientMatrix);
+                    float weightXY = kernelGaussian2D.at<float>(rowWeight + windowHalf, colWeight + windowHalf);
+                    secondMomentMatrix = secondMomentMatrix + weightXY * gradientMatrix;
 //                    print("secondMomentMatrix", secondMomentMatrix);
                 }
             }
@@ -408,7 +409,7 @@ int main() {
             // compute Harris corner response
             // R = det(M) - alpha * trace(M) ^ 2 = lambda1 * lambda2 - alpha (1ambda1 + lambda2) ^ 2
             float trace = (cv::trace(secondMomentMatrix))[0];
-            float R = cv::determinant(secondMomentMatrix) - (alpha * trace * trace);
+            float R = cv::determinant(secondMomentMatrix) - alpha * trace * trace;
             cornerResponse.at<float>(row, col) = R;
 //            printRow("cornerResponse", cornerResponse);
         }
@@ -418,15 +419,18 @@ int main() {
 
     cv::Mat normalizedHarrisResponse;
     cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    printRow("normalizedHarrisResponse", normalizedHarrisResponse);
+
     string responsePath = "../simA-harris-response.jpg";
     cv::imwrite(responsePath, normalizedHarrisResponse);
 
     getCornerResponse( gradientX, gradientY, windowSize, sigmaGaussian, alpha, cornerResponse);
-    printRow("gradientX", gradientX);
-    printRow("gradientY", gradientY);
-    printRow("cornerResponse", cornerResponse);
 
     cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
     cv::imwrite(responsePath, normalizedHarrisResponse);
 
+    printRow("gradientX", gradientX);
+    printRow("gradientY", gradientY);
+    printRow("cornerResponse", cornerResponse);
+    printRow("normalizedHarrisResponse", normalizedHarrisResponse);
 }
