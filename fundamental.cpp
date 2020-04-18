@@ -48,10 +48,36 @@ struct FormattedMat {
     }
 };
 
+string type2str(int type) {
+    string r;
+
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+    switch ( depth ) {
+        case CV_8U:  r = "8U"; break;
+        case CV_8S:  r = "8S"; break;
+        case CV_16U: r = "16U"; break;
+        case CV_16S: r = "16S"; break;
+        case CV_32S: r = "32S"; break;
+        case CV_32F: r = "32F"; break;
+        case CV_64F: r = "64F"; break;
+        default:     r = "User"; break;
+    }
+
+    r += "C";
+    r += (chans+'0');
+
+    return r;
+}
+
+void printRow(const string name, const cv::Mat m) {
+    std::cout << name << ": (" << m.size()  <<  "), type:" <<   type2str(m.type()) << " = " << std::endl << m.row(0) << std::endl << std::endl;
+}
+
 void print(const string name, const cv::Mat m) {
-    std::cout << name << ": ( " << m.size() << " ) = " << std::endl << FormattedMat(m) << std::endl << std::endl;
-//    auto logger = spdlog::get(config::STDOUT_LOGGER);
-//    logger->info(name, ":\n{}", FormattedMat(fMatEst));
+    std::cout << name << ": ( " << m.size()  <<  " ), type: " <<   m.type() << " = " << std::endl << m << std::endl << std::endl;
+//    std::cout << name << ": ( " << m.size()  <<  " ), type: " <<   m.type() << " = " << std::endl << FormattedMat(m) << std::endl << std::endl;
 }
 
 void print(const string name, const Eigen::MatrixXf m) {
@@ -253,47 +279,110 @@ void fundamental() {
 
 //using namespace cv;
 
+void getCornerResponse(const cv::Mat& gradX,
+                                    const cv::Mat& gradY,
+                                    const size_t windowSize,
+                                    const double gaussianSigma,
+                                    const float harrisScore,
+                                    cv::Mat& cornerResponse) {
+    assert(gradX.rows == gradY.rows && gradX.cols == gradY.cols && gradX.type() == CV_32F &&
+           gradX.type() == gradY.type());
+    assert(windowSize % 2 == 1);
+
+    cornerResponse = cv::Mat::zeros(gradX.rows, gradX.cols, CV_32F);
+
+    // Get a 1D Gaussian kernel with a given size and sigma
+    cv::Mat gauss = cv::getGaussianKernel(windowSize, gaussianSigma, gradX.type());
+    // Outer product for a 2D matrix
+    gauss = gauss * gauss.t();
+    // Iterate over each pixel in the image and compute the second moment matrix for each pixel,
+    // where the weights are the Gaussian kernel
+    int windowRad = windowSize / 2;
+    for (int y = 0; y < gradX.rows; y++) {
+        for (int x = 0; x < gradX.cols; x++) {
+            cv::Mat secondMoment = cv::Mat::zeros(2, 2, CV_32F);
+            for (int wy = -windowRad; wy <= windowRad; wy++) {
+                for (int wx = -windowRad; wx <= windowRad; wx++) {
+                    // Get the gradient values
+                    float gradXVal = gradX.at<float>(std::min(std::max(0, y + wy), gradX.rows - 1),
+                                                     std::min(std::max(0, x + wx), gradX.cols - 1));
+                    float gradYVal = gradY.at<float>(std::min(std::max(0, y + wy), gradY.rows - 1),
+                                                     std::min(std::max(0, x + wx), gradY.cols - 1));
+
+                    float weight = gauss.at<float>(wy + windowRad, wx + windowRad);
+
+                    // Build up gradient matrix
+                    cv::Mat gradVals = (cv::Mat_<float>(2, 2) << gradXVal * gradXVal,
+                            gradXVal * gradYVal,
+                            gradXVal * gradYVal,
+                            gradYVal * gradYVal);
+
+                    // Add to second moment matrix sum
+                    secondMoment = secondMoment + weight * gradVals;
+                }
+            }
+            // Compute the corner response value, R
+            float trace = (cv::trace(secondMoment))[0];
+            float R = cv::determinant(secondMoment) - harrisScore * trace * trace;
+
+            cornerResponse.at<float>(y, x) = R;
+        }
+    }
+}
+
 int main() {
 //    fundamental();
 
-    string filepath = "../simA.jpg";
-    cv::Mat  src = imread( filepath, cv::IMREAD_COLOR );
+    string imgPath = "../simA.jpg";
+    cv::Mat img = cv::imread(imgPath, cv::IMREAD_UNCHANGED);
+    printRow("img", img);
 
-    cv::Mat src_gray;
-    cvtColor(src, src_gray, cv::COLOR_BGR2GRAY);
+    cv::Mat input;
+    img.convertTo(input, CV_32F);
+    printRow("input", input);
 
-    int ksize = 1;
+    int sobel_kernel_size = 3;
     int scale = 1;
     int delta = 0;
-    int ddepth = CV_16S;
+    int ddepth = CV_32F;
 
     cv::Mat  gradientX, gradientY;
-    cv::Sobel(src_gray, gradientX, ddepth, 1, 0, ksize, scale, delta, cv::BORDER_DEFAULT);
-    cv::Sobel(src_gray, gradientY, ddepth, 0, 1, ksize, scale, delta, cv::BORDER_DEFAULT);
+    cv::Sobel(input, gradientX, ddepth, 1, 0, sobel_kernel_size, scale, delta, cv::BORDER_DEFAULT);
+    cv::Sobel(input, gradientY, ddepth, 0, 1, sobel_kernel_size, scale, delta, cv::BORDER_DEFAULT);
+    printRow("gradientX", gradientX);
+    printRow("gradientY", gradientY);
 
     cv::Mat gradCombined(gradientX.rows + gradientY.rows, gradientX.cols, CV_8UC1);
     cv::Mat gradXNorm(gradientX.rows, gradientX.cols, CV_8UC1);
     cv::Mat gradYNorm(gradientY.rows, gradientY.cols, CV_8UC1);
 
-    cv::normalize(gradientY, gradXNorm, 0, 255, cv::NORM_MINMAX);
+    cv::normalize(gradientX, gradXNorm, 0, 255, cv::NORM_MINMAX);
     cv::normalize(gradientY, gradYNorm, 0, 255, cv::NORM_MINMAX);
     cv::hconcat(gradXNorm, gradYNorm, gradCombined);
+    printRow("gradXNorm", gradXNorm);
+    printRow("gradYNorm", gradYNorm);
 
     string outputPath = "../simA-sobel.jpg";
     cv::imwrite(outputPath, gradCombined);
 
     cv::Mat cornerResponse = cv::Mat::zeros(gradientX.rows, gradientX.cols, CV_32F);
+    printRow("cornerResponse", cornerResponse);
 
     const size_t windowSize = 5;
     const double sigmaGaussian = 1.5;
-    cv::Mat kernelGaussian1D = cv::getGaussianKernel(windowSize, sigmaGaussian, CV_32F);
+    const float alpha = 0.04;
+    cv::Mat kernelGaussian1D = cv::getGaussianKernel(windowSize, sigmaGaussian, gradientX.type());
+    print("kernelGaussian1D", kernelGaussian1D);
+
     kernelGaussian1D = kernelGaussian1D * kernelGaussian1D.t(); // generate a 2d matrix with an outer product
+    print("kernelGaussian1D", kernelGaussian1D);
 
     // compute a second moment matrix for each pixel, where the weights are the Gaussian kernel
     int windowHalf = windowSize / 2;
     for (int row = 0; row < gradientX.rows; row++) {
         for (int col = 0; col < gradientX.cols; col++) {
             cv::Mat secondMomentMatrix = cv::Mat::zeros(2, 2, CV_32F);
+//            print("secondMomentMatrix", secondMomentMatrix);
 
             for (int rowWeight = -windowHalf; rowWeight <= windowHalf; rowWeight++) {
                 for (int colWeight = -windowHalf; colWeight <= windowHalf; colWeight++) {
@@ -308,24 +397,36 @@ int main() {
                     cv::Mat gradientMatrix = (cv::Mat_<float>(2, 2)
                             << xGradientAt * xGradientAt, xGradientAt * yGradientAt,
                             xGradientAt, yGradientAt, yGradientAt * yGradientAt);
+//                    print("gradientMatrix", gradientMatrix);
 
                     float weightXY = kernelGaussian1D.at<float>(rowWeight + windowHalf, colWeight + windowHalf);
                     secondMomentMatrix = secondMomentMatrix + (weightXY * gradientMatrix);
+//                    print("secondMomentMatrix", secondMomentMatrix);
                 }
             }
 
             // compute Harris corner response
             // R = det(M) - alpha * trace(M) ^ 2 = lambda1 * lambda2 - alpha (1ambda1 + lambda2) ^ 2
-            const float alpha = 0.04;
             float trace = (cv::trace(secondMomentMatrix))[0];
             float R = cv::determinant(secondMomentMatrix) - (alpha * trace * trace);
             cornerResponse.at<float>(row, col) = R;
+//            printRow("cornerResponse", cornerResponse);
         }
     }
+
+    printRow("cornerResponse", cornerResponse);
 
     cv::Mat normalizedHarrisResponse;
     cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
     string responsePath = "../simA-harris-response.jpg";
+    cv::imwrite(responsePath, normalizedHarrisResponse);
+
+    getCornerResponse( gradientX, gradientY, windowSize, sigmaGaussian, alpha, cornerResponse);
+    printRow("gradientX", gradientX);
+    printRow("gradientY", gradientY);
+    printRow("cornerResponse", cornerResponse);
+
+    cv::normalize(cornerResponse, normalizedHarrisResponse, 0, 255, cv::NORM_MINMAX, CV_8UC1);
     cv::imwrite(responsePath, normalizedHarrisResponse);
 
 }
