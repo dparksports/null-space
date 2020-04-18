@@ -455,7 +455,7 @@ void computeHarrisResponse(string current_path, string filename) {
     cv::Mat localMaximaCorners = cv::Mat::zeros(cornerResponse.rows, cornerResponse.cols, cornerResponse.type());
     printRow("localMaximaCorners", localMaximaCorners);
 
-    // non-maximum suppression?
+    // collect local maxima
     for (int row = 0; row < cornerResponse.rows; row++) {
         for (int col = 0; col < cornerResponse.cols; col++) {
             float cornerValue = cornerResponse.at<float>(row, col);
