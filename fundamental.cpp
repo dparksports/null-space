@@ -387,8 +387,7 @@ void computeHarrisResponse(string current_path, string filename) {
     kernelGaussian2D = kernelGaussian2D * kernelGaussian2D.t(); // generate a 2d matrix with an outer product
     print("kernelGaussian1D", kernelGaussian2D);
 
-    // compute a second moment matrix for each pixel, where t    static constexpr size_t SIFT_WINDOW_SIZE = 10;
-// he weights are the Gaussian kernel
+    // compute a second moment matrix for each pixel, where the weights are the Gaussian kernel
     int windowHalf = windowSize / 2;
     for (int row = 0; row < gradientX.rows; row++) {
         for (int col = 0; col < gradientX.cols; col++) {
@@ -448,9 +447,8 @@ void computeHarrisResponse(string current_path, string filename) {
 
 
     const int minDistance = 5;
-    const double threshold = 500000000;    static constexpr size_t SIFT_WINDOW_SIZE = 10;
-
-
+    const double threshold = 500000000;
+    static constexpr size_t SIFT_WINDOW_SIZE = 10;
     std::vector<std::pair<int, int>> cornerLocs;
 
     assert(cornerResponse.type() == CV_32F);
@@ -664,8 +662,8 @@ int main() {
     containers.emplace_back();
     containers.emplace_back();
 
-    computeScaleInvariant(containers[0], "../", "simA");
-    computeScaleInvariant(containers[1], "../", "simB");
+    computeScaleInvariant(containers[0], "../", "transA");
+    computeScaleInvariant(containers[1], "../", "transB");
 
     auto matcher = cv::BFMatcher::create();
     containers[0].goodMatches.clear();
@@ -703,6 +701,6 @@ int main() {
            << "; distance=" << match.distance;
     }
 
-    string combinedPath = "../sim-combined.jpg";
+    string combinedPath = "../trans-combined.jpg";
     cv::imwrite(combinedPath, combinedSrc);
 }
