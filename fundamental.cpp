@@ -1111,12 +1111,12 @@ int transformAffineByInlierSamples(string suffix) {
     cv::Mat blendImage = simA * 0.5 + reversedByAffine * 0.5;
     printRow("blendImage", blendImage);
 
-    string affinePath = "../" + suffix + "-affine.jpg";
+    string affinePath = "../" + suffix + "-affine-primeP.jpg";
     cv::imwrite(affinePath, blendImage);
 }
 
 int main() {
-//    fundamental();
+//    fundamental();transformAffineByInlierSamples
 
 //    computeHarrisResponse("../", "simA");
 //    computeHarrisResponse("../", "simB");
@@ -1128,6 +1128,9 @@ int main() {
 
 //    sampleRandomConsensus("sim");
 //    transformSimilarityAffineByInlierSamples("trans");
-    transformAffineByInlierSamples("trans");
+//    transformAffineByInlierSamples("trans");
+
+    transformSimilarityAffineByInlierSamples("sim");
+//    transformAffineByInlierSamples("sim");
 
 }
