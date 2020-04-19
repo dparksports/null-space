@@ -935,7 +935,7 @@ int sampleRandomConsensus(string suffix) {
     cv::imwrite(inlierPath, combinedImage);
 }
 
-int transformAffineByInlierSamples(string suffix) {
+int transformSimilarityAffineByInlierSamples(string suffix) {
     std::vector<FeaturesContainer> containers;
     containers.emplace_back();
     containers.emplace_back();
@@ -1025,6 +1025,96 @@ int transformAffineByInlierSamples(string suffix) {
     cv::imwrite(blendedPath, blendImage);
 }
 
+int transformAffineByInlierSamples(string suffix) {
+    std::vector<FeaturesContainer> containers;
+    containers.emplace_back();
+    containers.emplace_back();
+
+    computeScaleInvariant(containers[0], "../", suffix + "A");
+    computeScaleInvariant(containers[1], "../", suffix + "B");
+
+    containers[0].goodMatches.clear();
+    containers[1].goodMatches.clear();
+
+    // Use KNN to find 2 matches for each point so we can apply the ratio test from the original
+    // SIFT paper (https://people.eecs.berkeley.edu/~malik/cs294/lowe-ijcv04.pdf)
+    std::vector<std::vector<cv::DMatch>> rawMatches;
+
+    auto matcher = cv::BFMatcher::create();
+    matcher->knnMatch(containers[0].descriptors, containers[1].descriptors, rawMatches, 2);
+    for (const auto& matchPair : rawMatches) {
+        if (matchPair[0].distance < 0.75 * matchPair[1].distance) {
+            containers[0].goodMatches.push_back(matchPair[0]);
+        }
+    }
+    // Copy good matches from img1 to img2
+    containers[1].goodMatches = containers[0].goodMatches;
+
+    // Create image with lines drawn between matched points. As we iterate through each point, log
+    // its info
+    cv::Mat combinedSrc;
+    cv::hconcat(containers[0].input, containers[1].input, combinedSrc);
+    cv::cvtColor(combinedSrc, combinedSrc, cv::COLOR_GRAY2RGB);
+
+    std::stringstream ss;
+    ss << "\nMatches:";
+    cv::RNG rng(12345);
+    for (const auto& match : containers[0].goodMatches) {
+        cv::KeyPoint k1 = containers[0].keypoints[match.queryIdx];
+        cv::KeyPoint k2 = containers[1].keypoints[match.trainIdx];
+        int xOffset = containers[0].input.cols;
+        cv::line(combinedSrc,
+                 k1.pt,
+                 cv::Point2f(k2.pt.x + xOffset, k2.pt.y),
+                 cv::Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255)));
+        ss << "\nqueryIdx=" << match.queryIdx << "; trainIdx=" << match.trainIdx
+           << "; distance=" << match.distance;
+    }
+
+    std::cout << ss.str() << std::endl;
+    std::cout << "Found good matches:" << containers[0].goodMatches.size() << std::endl;
+    string combinedPath = "../" + suffix + "-combined.jpg";
+    cv::imwrite(combinedPath, combinedSrc);
+
+    // collect samples with (1 - p)^e
+    std::vector<cv::Point2f> pointsTranslateA, pointsTranslateB;
+    for (const auto& match: containers[0].goodMatches) {
+        pointsTranslateA.emplace_back(containers[0].keypoints[match.queryIdx].pt);
+        pointsTranslateB.emplace_back(containers[1].keypoints[match.trainIdx].pt);
+    }
+
+    int reprojection_threshold = 6;
+    int max_iterations = 2000;
+    float minimumConsensusRatio = 0.6;
+
+    TransformType transformType = TransformType::AFFINE;
+    cv::Mat transformAffine;
+    std::vector<int> inlierSet;
+    double outlierRatio;
+    std::tie(transformAffine, inlierSet, outlierRatio) = solve(pointsTranslateA,
+                                                               pointsTranslateB,
+                                                               transformType,
+                                                               reprojection_threshold, max_iterations, minimumConsensusRatio);
+
+    cv::Mat transformAffineInverted;
+    cv::invertAffineTransform(transformAffine, transformAffineInverted);
+    print("transformAffine", transformAffine);
+    print("transformAffineInverted", transformAffineInverted);
+
+    cv::Mat simA = containers[0].input.clone();
+    cv::Mat simB = containers[1].input.clone();
+
+    cv::Mat reversedByAffine = cv::Mat::zeros(simB.rows, simB.cols, simB.type());
+    cv::warpAffine(simB, reversedByAffine, transformAffineInverted, reversedByAffine.size());
+    printRow("reversedByAffine", reversedByAffine);
+
+    cv::Mat blendImage = simA * 0.5 + reversedByAffine * 0.5;
+    printRow("blendImage", blendImage);
+
+    string affinePath = "../" + suffix + "-affine.jpg";
+    cv::imwrite(affinePath, blendImage);
+}
+
 int main() {
 //    fundamental();
 
@@ -1037,5 +1127,7 @@ int main() {
 //    matchKNN("trans");
 
 //    sampleRandomConsensus("sim");
+//    transformSimilarityAffineByInlierSamples("trans");
     transformAffineByInlierSamples("trans");
+
 }
