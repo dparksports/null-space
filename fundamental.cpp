@@ -704,6 +704,58 @@ int matchKNN(string suffix) {
     cv::imwrite(combinedPath, combinedSrc);
 }
 
+int sampleRandomConsensus(string suffix) {
+    std::vector<FeaturesContainer> containers;
+    containers.emplace_back();
+    containers.emplace_back();
+
+    computeScaleInvariant(containers[0], "../", suffix + "A");
+    computeScaleInvariant(containers[1], "../", suffix + "B");
+
+    containers[0].goodMatches.clear();
+    containers[1].goodMatches.clear();
+
+    // Use KNN to find 2 matches for each point so we can apply the ratio test from the original
+    // SIFT paper (https://people.eecs.berkeley.edu/~malik/cs294/lowe-ijcv04.pdf)
+    std::vector<std::vector<cv::DMatch>> rawMatches;
+
+    auto matcher = cv::BFMatcher::create();
+    matcher->knnMatch(containers[0].descriptors, containers[1].descriptors, rawMatches, 2);
+    for (const auto& matchPair : rawMatches) {
+        if (matchPair[0].distance < 0.75 * matchPair[1].distance) {
+            containers[0].goodMatches.push_back(matchPair[0]);
+        }
+    }
+    // Copy good matches from img1 to img2
+    containers[1].goodMatches = containers[0].goodMatches;
+
+    // Create image with lines drawn between matched points. As we iterate through each point, log
+    // its info
+    cv::Mat combinedSrc;
+    cv::hconcat(containers[0].input, containers[1].input, combinedSrc);
+    cv::cvtColor(combinedSrc, combinedSrc, cv::COLOR_GRAY2RGB);
+
+    std::stringstream ss;
+    ss << "\nMatches:";
+    cv::RNG rng(12345);
+    for (const auto& match : containers[0].goodMatches) {
+        cv::KeyPoint k1 = containers[0].keypoints[match.queryIdx];
+        cv::KeyPoint k2 = containers[1].keypoints[match.trainIdx];
+        int xOffset = containers[0].input.cols;
+        cv::line(combinedSrc,
+                 k1.pt,
+                 cv::Point2f(k2.pt.x + xOffset, k2.pt.y),
+                 cv::Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255)));
+        ss << "\nqueryIdx=" << match.queryIdx << "; trainIdx=" << match.trainIdx
+           << "; distance=" << match.distance;
+    }
+
+    std::cout << ss.str() << std::endl;
+    std::cout << "Found good matches:" << containers[0].goodMatches.size() << std::endl;
+    string combinedPath = "../" + suffix + "-combined.jpg";
+    cv::imwrite(combinedPath, combinedSrc);
+}
+
 int main() {
 //    fundamental();
 
@@ -712,6 +764,8 @@ int main() {
 //    computeHarrisResponse("../", "transA");
 //    computeHarrisResponse("../", "transB");
 
-    matchKNN("sim");
-    matchKNN("trans");
+//    matchKNN("sim");
+//    matchKNN("trans");
+
+    sampleRandomConsensus("sim");
 }
