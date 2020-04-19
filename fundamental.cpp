@@ -904,11 +904,28 @@ int sampleRandomConsensus(string suffix) {
         pointsTranslateB.emplace_back(containers[1].keypoints[match.trainIdx].pt);
     }
 
+    int reprojection_threshold = 10;
+    int max_iterations = 2000;
+    float minimumConsensusRatio = 0.2;
+
+    TransformType transformType = TransformType::TRANSLATION;
     cv::Mat transformTranslate;
     std::vector<int> inlierSet;
     double outlierRatio;
+    std::tie(transformTranslate, inlierSet, outlierRatio) = solve(pointsTranslateA, pointsTranslateB,
+            transformType, reprojection_threshold, max_iterations, minimumConsensusRatio);
 
+    cv::Mat combinedImage;
+    cv::hconcat(containers[0].input, containers[1].input, combinedImage);
+    cv::cvtColor(combinedSrc, combinedSrc, cv::COLOR_GRAY2RGB);
+    for (const int& index : inlierSet) {
+        cv::line(combinedImage, pointsTranslateA[index],
+                cv::Point2f(pointsTranslateB[index].x + containers[0].input.cols, pointsTranslateB[index].y),
+                cv::Scalar(rng.uniform(0,255), rng.uniform(0,255), rng.uniform(0, 255)));
+    }
 
+    string inlierPath = "../" + suffix + "-inliers.jpg";
+    cv::imwrite(inlierPath, combinedImage);
 }
 
 int main() {
