@@ -917,7 +917,14 @@ int sampleRandomConsensus(string suffix) {
 
     cv::Mat combinedImage;
     cv::hconcat(containers[0].input, containers[1].input, combinedImage);
-    cv::cvtColor(combinedSrc, combinedSrc, cv::COLOR_GRAY2RGB);
+    printRow("input0", containers[0].input);
+    printRow("input1", containers[1].input);
+    printRow("combinedImage", combinedImage);
+
+    cv::cvtColor(combinedImage, combinedImage, cv::COLOR_GRAY2RGB);
+    printRow("COLOR_GRAY2RGB", combinedImage);
+
+
     for (const int& index : inlierSet) {
         cv::line(combinedImage, pointsTranslateA[index],
                 cv::Point2f(pointsTranslateB[index].x + containers[0].input.cols, pointsTranslateB[index].y),
