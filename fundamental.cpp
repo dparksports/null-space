@@ -1001,24 +1001,28 @@ int transformAffineByInlierSamples(string suffix) {
     cv::Mat transformAffine;
     std::vector<int> inlierSet;
     double outlierRatio;
-    std::tie(transformAffine, inlierSet, outlierRatio) = solve(pointsTranslateA, pointsTranslateB,
-                                                                  transformType, reprojection_threshold, max_iterations, minimumConsensusRatio);
+    std::tie(transformAffine, inlierSet, outlierRatio) = solve(pointsTranslateA,
+            pointsTranslateB,
+            transformType,
+            reprojection_threshold, max_iterations, minimumConsensusRatio);
 
     cv::Mat transformAffineInverted;
     cv::invertAffineTransform(transformAffine, transformAffineInverted);
+    print("transformAffine", transformAffine);
+    print("transformAffineInverted", transformAffineInverted);
 
     cv::Mat simA = containers[0].input.clone();
     cv::Mat simB = containers[1].input.clone();
 
     cv::Mat reversedByAffine = cv::Mat::zeros(simB.rows, simB.cols, simB.type());
-    cv::wrapAffine(simB, reversedByAffine, transformAffine, reversedByAffine.size());
+    cv::warpAffine(simB, reversedByAffine, transformAffineInverted, reversedByAffine.size());
+    printRow("reversedByAffine", reversedByAffine);
 
     cv::Mat blendImage = simA * 0.5 + reversedByAffine * 0.5;
     printRow("blendImage", blendImage);
 
     string blendedPath = "../" + suffix + "-blended.jpg";
     cv::imwrite(blendedPath, blendImage);
-
 }
 
 int main() {
