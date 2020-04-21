@@ -648,6 +648,7 @@ void computeScaleInvariant(FeaturesContainer& container, string current_path, st
 
     auto featuresSIFT = cv::xfeatures2d::SIFT::create();
     featuresSIFT->compute(container.input, container.keypoints, container.descriptors);
+    printRow("descriptors", container.descriptors);
 }
 
 int matchKNN(string suffix) {
@@ -1118,7 +1119,7 @@ int transformAffineByInlierSamples(string suffix) {
 int main() {
 //    fundamental();transformAffineByInlierSamples
 
-//    computeHarrisResponse("../", "simA");
+    computeHarrisResponse("../", "simA");
 //    computeHarrisResponse("../", "simB");
 //    computeHarrisResponse("../", "transA");
 //    computeHarrisResponse("../", "transB");
