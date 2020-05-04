@@ -15,6 +15,7 @@
 // setprecision
 #include <iomanip>
 #include <iostream>
+#include <random>
 
 // logger
 //#include <spdlog/fmt/ostr.h>
